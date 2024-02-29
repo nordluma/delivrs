@@ -1,3 +1,4 @@
+workspace = { members = ["slow-server"] }
 [package]
 name = "delivrs"
 version = "0.1.0"

@@ -18,7 +18,7 @@ async fn main() -> miette::Result<()> {
     tracing_subscriber::fmt::init();
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    let app = Router::new().route("/", get(index)).fallback(proxy_request);
+    let app = Router::new().fallback(proxy_request);
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .into_diagnostic()?;
@@ -27,11 +27,6 @@ async fn main() -> miette::Result<()> {
     axum::serve(listener, app).await.into_diagnostic()?;
 
     Ok(())
-}
-
-async fn index() -> impl IntoResponse {
-    println!("->> HANDLER - index");
-    "Hello, world"
 }
 
 async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoResponse, String> {

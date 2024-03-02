@@ -19,6 +19,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 async fn index() -> actix_web::Result<Markup> {
+    println!("->> HANDLER - index");
     Ok(html!(
         html {
             body {
@@ -36,6 +37,7 @@ async fn index() -> actix_web::Result<Markup> {
 }
 
 async fn fast() -> actix_web::Result<Markup> {
+    println!("->> HANDLER - fast");
     let now = Utc::now();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -48,6 +50,7 @@ async fn fast() -> actix_web::Result<Markup> {
 }
 
 async fn slow() -> actix_web::Result<Markup> {
+    println!("->> HANDLER - slow");
     let now = Utc::now();
     tokio::time::sleep(Duration::from_secs(5)).await;
 

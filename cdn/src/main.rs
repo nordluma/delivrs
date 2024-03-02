@@ -97,6 +97,7 @@ async fn try_get_cached_response(
 fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
     let mut reqwest_headers = ReqHeaderMap::with_capacity(headers.len());
     reqwest_headers.extend(headers.into_iter().map(|(name, value)| {
+        // TODO: change unwrap to something better
         let name = ReqHeaderName::from_bytes(name.unwrap().as_ref()).unwrap();
         let value = ReqHeaderValue::from_bytes(value.as_ref()).unwrap();
 

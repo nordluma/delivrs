@@ -8,7 +8,7 @@ use axum::{
     Router,
 };
 use miette::IntoDiagnostic;
-use tracing::debug;
+use tracing::{debug, info};
 
 const PROXY_FROM_DOMAIN: &str = "slow.delivrs.test";
 const PROXY_ORIGIN_DOMAIN: &str = "localhost:8080";
@@ -35,10 +35,27 @@ async fn index() -> impl IntoResponse {
 }
 
 async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoResponse, String> {
-    println!("->> HANDLER - proxy_request: {:?}", request);
+    info!("HANDLER - proxy_request: {:?}", request);
+
+    let uri = request.uri();
+    let host = request
+        .headers()
+        .get("host")
+        .ok_or("No host specified")?
+        .to_str()
+        .map_err(|e| format!("Could not parse host header: {}", e))?;
+
+    if host != PROXY_FROM_DOMAIN {
+        return Err(format!(
+            "Requests are only proxied from specified domain. Found: {} - Expected: {}",
+            host, PROXY_FROM_DOMAIN
+        ));
+    }
+
+    let path = uri.path_and_query().map(|pq| pq.path()).unwrap_or("/");
     let client = reqwest::Client::new();
     let reqw_response = client
-        .get(format!("http://{}", PROXY_ORIGIN_DOMAIN))
+        .get(format!("http://{}{}", PROXY_ORIGIN_DOMAIN, path))
         .send()
         .await
         .map_err(|e| format!("request failed: {}", e))?;
@@ -52,7 +69,7 @@ async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoRespon
         }))
     });
 
-    let res = response_builder
+    let response = response_builder
         .body(Body::from(
             reqw_response
                 .bytes()
@@ -62,5 +79,5 @@ async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoRespon
         ))
         .map_err(|_| "failed to set body")?;
 
-    Ok(res)
+    Ok(response)
 }

@@ -3,7 +3,7 @@ use std::{net::SocketAddr, str::FromStr};
 use axum::{
     body::Body,
     extract::Host,
-    http::{HeaderMap, HeaderName, HeaderValue, Request},
+    http::{HeaderMap, HeaderName, HeaderValue, Method, Request},
     response::{IntoResponse, Response},
     Router,
 };
@@ -31,6 +31,7 @@ async fn main() -> miette::Result<()> {
 
 async fn proxy_request(
     Host(host): Host,
+    method: Method,
     headers: HeaderMap,
     request: Request<Body>,
 ) -> miette::Result<impl IntoResponse, String> {
@@ -55,7 +56,7 @@ async fn proxy_request(
     let client = reqwest::Client::new();
     let reqw_response = client
         .request(
-            reqwest::Method::from_str(&request.method().to_string()).unwrap(),
+            reqwest::Method::from_str(method.as_str()).unwrap(),
             format!("http://{}{}", PROXY_ORIGIN_DOMAIN, path),
         )
         .headers(map_to_reqwest_headers(headers))

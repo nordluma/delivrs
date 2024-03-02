@@ -1,15 +1,19 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     extract::Host,
     http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri},
     response::{IntoResponse, Response},
     Router,
 };
+use futures::StreamExt;
 use miette::IntoDiagnostic;
-use reqwest::header::{
-    HeaderMap as ReqHeaderMap, HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue,
+use reqwest::{
+    header::{
+        HeaderMap as ReqHeaderMap, HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue,
+    },
+    Method as ReqMethod,
 };
 use tracing::{debug, info};
 
@@ -64,7 +68,7 @@ async fn proxy_request(
     let client = reqwest::Client::new();
     let reqw_response = client
         .request(
-            reqwest::Method::from_str(method.as_str()).unwrap(),
+            ReqMethod::from_str(method.as_str()).unwrap(),
             url.to_string(),
         )
         .headers(map_to_reqwest_headers(headers))
@@ -89,6 +93,25 @@ fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
     reqwest_headers
 }
 
+async fn body_to_bytes(body: Body) -> miette::Result<Vec<u8>, String> {
+    let mut body_bytes = Vec::new();
+    let mut body = body.into_data_stream();
+    while let Some(bytes) = body.next().await {
+        let bytes = bytes.map_err(|e| format!("Failed the get bytes for body: {}", e))?;
+        body_bytes.extend(bytes);
+    }
+
+    Ok(body_bytes)
+}
+
+async fn response_body_to_bytes(response: reqwest::Response) -> miette::Result<Bytes, String> {
+    response
+        .bytes()
+        .await
+        .into_diagnostic()
+        .map_err(|e| format!("failed to get bytes from response: {}", e))
+}
+
 async fn into_axum_response(
     response: reqwest::Response,
 ) -> miette::Result<impl IntoResponse, String> {
@@ -102,13 +125,7 @@ async fn into_axum_response(
     });
 
     let response = response_builder
-        .body(Body::from(
-            response
-                .bytes()
-                .await
-                .into_diagnostic()
-                .map_err(|e| format!("failed to get bytes from response: {}", e))?,
-        ))
+        .body(Body::from(response_body_to_bytes(response).await?))
         .map_err(|e| format!("failed to set response body: {}", e))?;
 
     Ok(response)

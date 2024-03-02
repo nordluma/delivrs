@@ -37,9 +37,7 @@ async fn proxy_request(
 ) -> miette::Result<impl IntoResponse, String> {
     info!("HANDLER - proxy_request: {:?}", request);
 
-    let mut split = host.split(':');
-    let hostname = split.next().unwrap_or("unknown");
-
+    let hostname = host.split(':').next().unwrap_or("unknown");
     if hostname != PROXY_FROM_DOMAIN {
         return Err(format!(
             "Requests are only proxied from specified domain. Found: {} - Expected: {}",

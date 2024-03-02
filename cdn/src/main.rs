@@ -35,16 +35,22 @@ async fn proxy_request(
 ) -> miette::Result<impl IntoResponse, String> {
     info!("HANDLER - proxy_request: {:?}", request);
 
-    let uri = request.uri();
+    let mut split = host.split(':');
+    let hostname = split.next().unwrap_or("unknown");
 
-    if host != PROXY_FROM_DOMAIN {
+    if hostname != PROXY_FROM_DOMAIN {
         return Err(format!(
             "Requests are only proxied from specified domain. Found: {} - Expected: {}",
-            host, PROXY_FROM_DOMAIN
+            hostname, PROXY_FROM_DOMAIN
         ));
     }
 
-    let path = uri.path_and_query().map(|pq| pq.path()).unwrap_or("/");
+    let path = request
+        .uri()
+        .path_and_query()
+        .map(|pq| pq.path())
+        .unwrap_or("/");
+
     let client = reqwest::Client::new();
     let reqw_response = client
         .get(format!("http://{}{}", PROXY_ORIGIN_DOMAIN, path))

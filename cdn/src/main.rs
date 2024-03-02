@@ -67,7 +67,7 @@ async fn proxy_request(
         .headers(map_to_reqwest_headers(headers))
         .send()
         .await
-        .map_err(|e| format!("request failed: {}", e))?;
+        .map_err(|e| format!("proxied request failed: {}", e))?;
 
     let response = into_axum_response(reqw_response).await?;
 
@@ -104,9 +104,9 @@ async fn into_axum_response(
                 .bytes()
                 .await
                 .into_diagnostic()
-                .map_err(|_| "failed to get bytes from header")?,
+                .map_err(|e| format!("failed to get bytes from response: {}", e))?,
         ))
-        .map_err(|_| "failed to set body")?;
+        .map_err(|e| format!("failed to set response body: {}", e))?;
 
     Ok(response)
 }

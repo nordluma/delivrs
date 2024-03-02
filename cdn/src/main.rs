@@ -62,7 +62,5 @@ async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoRespon
         ))
         .map_err(|_| "failed to set body")?;
 
-    println!("{:?}", res.body());
-
     Ok(res)
 }

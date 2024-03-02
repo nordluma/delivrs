@@ -3,7 +3,7 @@ use std::{net::SocketAddr, str::FromStr};
 use axum::{
     body::Body,
     extract::Host,
-    http::{HeaderMap, HeaderName, HeaderValue, Method, Request},
+    http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri},
     response::{IntoResponse, Response},
     Router,
 };
@@ -47,17 +47,24 @@ async fn proxy_request(
         ));
     }
 
-    let path = request
-        .uri()
-        .path_and_query()
-        .map(|pq| pq.path())
-        .unwrap_or("/");
+    let url = Uri::builder()
+        .scheme("http")
+        .authority(PROXY_ORIGIN_DOMAIN)
+        .path_and_query(
+            request
+                .uri()
+                .path_and_query()
+                .map(|pq| pq.path())
+                .unwrap_or("/"),
+        )
+        .build()
+        .map_err(|e| format!("Failed to build url: {}", e))?;
 
     let client = reqwest::Client::new();
     let reqw_response = client
         .request(
             reqwest::Method::from_str(method.as_str()).unwrap(),
-            format!("http://{}{}", PROXY_ORIGIN_DOMAIN, path),
+            url.to_string(),
         )
         .headers(map_to_reqwest_headers(headers))
         .send()

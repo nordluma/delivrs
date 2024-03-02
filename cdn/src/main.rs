@@ -8,6 +8,9 @@ use axum::{
     Router,
 };
 use miette::IntoDiagnostic;
+use reqwest::header::{
+    HeaderMap as ReqHeaderMap, HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue,
+};
 use tracing::{debug, info};
 
 const PROXY_FROM_DOMAIN: &str = "slow.delivrs.test";
@@ -74,11 +77,11 @@ async fn proxy_request(
     Ok(response)
 }
 
-fn map_to_reqwest_headers(headers: HeaderMap) -> reqwest::header::HeaderMap {
-    let mut reqwest_headers = reqwest::header::HeaderMap::with_capacity(headers.len());
+fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
+    let mut reqwest_headers = ReqHeaderMap::with_capacity(headers.len());
     reqwest_headers.extend(headers.into_iter().map(|(name, value)| {
-        let name = reqwest::header::HeaderName::from_bytes(name.unwrap().as_ref()).unwrap();
-        let value = reqwest::header::HeaderValue::from_bytes(value.as_ref()).unwrap();
+        let name = ReqHeaderName::from_bytes(name.unwrap().as_ref()).unwrap();
+        let value = ReqHeaderValue::from_bytes(value.as_ref()).unwrap();
 
         (name, value)
     }));

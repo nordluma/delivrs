@@ -55,9 +55,17 @@ async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoRespon
         .await
         .map_err(|e| format!("request failed: {}", e))?;
 
-    let mut response_builder = Response::builder().status(reqw_response.status().as_u16());
+    let response = into_axum_response(reqw_response).await?;
+
+    Ok(response)
+}
+
+async fn into_axum_response(
+    response: reqwest::Response,
+) -> miette::Result<impl IntoResponse, String> {
+    let mut response_builder = Response::builder().status(response.status().as_u16());
     response_builder.headers_mut().map(|headers| {
-        headers.extend(reqw_response.headers().into_iter().map(|(name, value)| {
+        headers.extend(response.headers().into_iter().map(|(name, value)| {
             let name = HeaderName::from_bytes(name.as_ref()).unwrap();
             let value = HeaderValue::from_bytes(value.as_ref()).unwrap();
             (name, value)
@@ -66,7 +74,7 @@ async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoRespon
 
     let response = response_builder
         .body(Body::from(
-            reqw_response
+            response
                 .bytes()
                 .await
                 .into_diagnostic()

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpRequest, HttpServer};
 use chrono::Utc;
 use maud::{html, Markup};
 
@@ -18,8 +18,8 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-async fn index() -> actix_web::Result<Markup> {
-    println!("->> HANDLER - index");
+async fn index(request: HttpRequest) -> actix_web::Result<Markup> {
+    println!("->> HANDLER - index: {:?}", request);
     Ok(html!(
         html {
             body {
@@ -36,8 +36,8 @@ async fn index() -> actix_web::Result<Markup> {
     ))
 }
 
-async fn fast() -> actix_web::Result<Markup> {
-    println!("->> HANDLER - fast");
+async fn fast(request: HttpRequest) -> actix_web::Result<Markup> {
+    println!("->> HANDLER - fast: {:?}", request);
     let now = Utc::now();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -49,8 +49,8 @@ async fn fast() -> actix_web::Result<Markup> {
     ))
 }
 
-async fn slow() -> actix_web::Result<Markup> {
-    println!("->> HANDLER - slow");
+async fn slow(request: HttpRequest) -> actix_web::Result<Markup> {
+    println!("->> HANDLER - slow: {:?}", request);
     let now = Utc::now();
     tokio::time::sleep(Duration::from_secs(5)).await;
 

@@ -65,20 +65,33 @@ async fn proxy_request(
         .build()
         .map_err(|e| format!("Failed to build url: {}", e))?;
 
+    let response = try_get_cached_response(&method, &headers, &url, request.into_body()).await?;
+
+    //let response = into_axum_response(reqw_response).await?;
+
+    Ok(response)
+}
+
+async fn try_get_cached_response(
+    method: &Method,
+    headers: &HeaderMap,
+    url: &Uri,
+    body: Body,
+) -> miette::Result<impl IntoResponse, String> {
     let client = reqwest::Client::new();
-    let reqw_response = client
+
+    let response = client
         .request(
             ReqMethod::from_str(method.as_str()).unwrap(),
             url.to_string(),
         )
-        .headers(map_to_reqwest_headers(headers))
+        .headers(map_to_reqwest_headers(headers.clone()))
+        .body(body_to_bytes(body).await?)
         .send()
         .await
-        .map_err(|e| format!("proxied request failed: {}", e))?;
+        .map_err(|e| format!("Request failed: {}", e))?;
 
-    let response = into_axum_response(reqw_response).await?;
-
-    Ok(response)
+    Ok(into_axum_response(response).await?)
 }
 
 fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {

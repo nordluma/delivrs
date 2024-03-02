@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use axum::{
     body::Body,
+    extract::Host,
     http::{HeaderName, HeaderValue, Request},
     response::{IntoResponse, Response},
     Router,
@@ -28,16 +29,13 @@ async fn main() -> miette::Result<()> {
     Ok(())
 }
 
-async fn proxy_request(request: Request<Body>) -> miette::Result<impl IntoResponse, String> {
+async fn proxy_request(
+    Host(host): Host,
+    request: Request<Body>,
+) -> miette::Result<impl IntoResponse, String> {
     info!("HANDLER - proxy_request: {:?}", request);
 
     let uri = request.uri();
-    let host = request
-        .headers()
-        .get("host")
-        .ok_or("No host specified")?
-        .to_str()
-        .map_err(|e| format!("Could not parse host header: {}", e))?;
 
     if host != PROXY_FROM_DOMAIN {
         return Err(format!(

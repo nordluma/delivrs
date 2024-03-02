@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use axum::{
     body::Body,
     extract::Host,
-    http::{HeaderName, HeaderValue, Request},
+    http::{HeaderMap, HeaderName, HeaderValue, Request},
     response::{IntoResponse, Response},
     Router,
 };
@@ -31,6 +31,7 @@ async fn main() -> miette::Result<()> {
 
 async fn proxy_request(
     Host(host): Host,
+    headers: HeaderMap,
     request: Request<Body>,
 ) -> miette::Result<impl IntoResponse, String> {
     info!("HANDLER - proxy_request: {:?}", request);
@@ -54,6 +55,7 @@ async fn proxy_request(
     let client = reqwest::Client::new();
     let reqw_response = client
         .get(format!("http://{}{}", PROXY_ORIGIN_DOMAIN, path))
+        .headers(map_to_reqwest_headers(headers))
         .send()
         .await
         .map_err(|e| format!("request failed: {}", e))?;
@@ -61,6 +63,18 @@ async fn proxy_request(
     let response = into_axum_response(reqw_response).await?;
 
     Ok(response)
+}
+
+fn map_to_reqwest_headers(headers: HeaderMap) -> reqwest::header::HeaderMap {
+    let mut reqwest_headers = reqwest::header::HeaderMap::with_capacity(headers.len());
+    reqwest_headers.extend(headers.into_iter().map(|(name, value)| {
+        let name = reqwest::header::HeaderName::from_bytes(name.unwrap().as_ref()).unwrap();
+        let value = reqwest::header::HeaderValue::from_bytes(value.as_ref()).unwrap();
+
+        (name, value)
+    }));
+
+    reqwest_headers
 }
 
 async fn into_axum_response(

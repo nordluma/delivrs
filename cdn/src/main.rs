@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr};
 
 use axum::{
     body::Body,
@@ -54,7 +54,10 @@ async fn proxy_request(
 
     let client = reqwest::Client::new();
     let reqw_response = client
-        .get(format!("http://{}{}", PROXY_ORIGIN_DOMAIN, path))
+        .request(
+            reqwest::Method::from_str(&request.method().to_string()).unwrap(),
+            format!("http://{}{}", PROXY_ORIGIN_DOMAIN, path),
+        )
         .headers(map_to_reqwest_headers(headers))
         .send()
         .await

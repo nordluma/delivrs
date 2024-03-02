@@ -4,7 +4,6 @@ use axum::{
     body::Body,
     http::{HeaderName, HeaderValue, Request},
     response::{IntoResponse, Response},
-    routing::get,
     Router,
 };
 use miette::IntoDiagnostic;

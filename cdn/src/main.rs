@@ -1,16 +1,17 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use axum::{
-    body::Body,
+    body::Bytes,
+    debug_handler,
     extract::Host,
-    http::{HeaderMap, Method, Request, Uri},
+    http::{self, HeaderMap, Method, Uri},
     response::IntoResponse,
     Router,
 };
 use miette::IntoDiagnostic;
 use reqwest::Method as ReqMethod;
 use tracing::{debug, info};
-use utils::{body_to_bytes, into_axum_response, map_to_reqwest_headers};
+use utils::{into_axum_response, map_to_reqwest_headers};
 
 mod utils;
 
@@ -33,13 +34,15 @@ async fn main() -> miette::Result<()> {
     Ok(())
 }
 
+#[debug_handler]
 async fn proxy_request(
     Host(host): Host,
     method: Method,
+    url: Uri,
     headers: HeaderMap,
-    request: Request<Body>,
+    body_bytes: Bytes,
 ) -> miette::Result<impl IntoResponse, String> {
-    info!("HANDLER - proxy_request: {:?}", request);
+    info!("HANDLER - proxy_request");
 
     let hostname = host.split(':').next().unwrap_or("unknown");
     if hostname != PROXY_FROM_DOMAIN {
@@ -52,17 +55,11 @@ async fn proxy_request(
     let url = Uri::builder()
         .scheme("http")
         .authority(PROXY_ORIGIN_DOMAIN)
-        .path_and_query(
-            request
-                .uri()
-                .path_and_query()
-                .map(|pq| pq.path())
-                .unwrap_or("/"),
-        )
+        .path_and_query(url.path_and_query().map(|pq| pq.path()).unwrap_or("/"))
         .build()
         .map_err(|e| format!("Failed to build url: {}", e))?;
 
-    let response = try_get_cached_response(&method, &headers, &url, request.into_body()).await?;
+    let response = try_get_cached_response(&method, &headers, &url, body_bytes).await?;
 
     Ok(response)
 }
@@ -71,7 +68,7 @@ async fn try_get_cached_response(
     method: &Method,
     headers: &HeaderMap,
     url: &Uri,
-    body: Body,
+    body: Bytes,
 ) -> miette::Result<impl IntoResponse, String> {
     let client = reqwest::Client::new();
 
@@ -81,7 +78,7 @@ async fn try_get_cached_response(
             url.to_string(),
         )
         .headers(map_to_reqwest_headers(headers.clone()))
-        .body(body_to_bytes(body).await?)
+        .body(body)
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;

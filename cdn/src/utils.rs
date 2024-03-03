@@ -3,7 +3,6 @@ use axum::{
     http::{HeaderMap, HeaderName, HeaderValue},
     response::{IntoResponse, Response},
 };
-use futures::StreamExt;
 use miette::IntoDiagnostic;
 use reqwest::header::{
     HeaderMap as ReqHeaderMap, HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue,
@@ -20,17 +19,6 @@ pub fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
     }));
 
     reqwest_headers
-}
-
-pub async fn body_to_bytes(body: Body) -> miette::Result<Vec<u8>, String> {
-    let mut body_bytes = Vec::new();
-    let mut body = body.into_data_stream();
-    while let Some(bytes) = body.next().await {
-        let bytes = bytes.map_err(|e| format!("Failed the get bytes for body: {}", e))?;
-        body_bytes.extend(bytes);
-    }
-
-    Ok(body_bytes)
 }
 
 pub async fn response_body_to_bytes(response: reqwest::Response) -> miette::Result<Bytes, String> {

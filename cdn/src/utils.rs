@@ -1,7 +1,7 @@
 use axum::{
     body::{Body, Bytes},
     http::{HeaderMap, HeaderName, HeaderValue},
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use miette::IntoDiagnostic;
 use reqwest::header::{
@@ -31,7 +31,7 @@ pub async fn response_body_to_bytes(response: reqwest::Response) -> miette::Resu
 
 pub async fn into_axum_response(
     response: reqwest::Response,
-) -> miette::Result<impl IntoResponse, String> {
+) -> miette::Result<Response<Body>, String> {
     let mut response_builder = Response::builder().status(response.status().as_u16());
     response_builder.headers_mut().map(|headers| {
         headers.extend(response.headers().into_iter().map(|(name, value)| {

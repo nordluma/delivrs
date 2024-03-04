@@ -21,7 +21,7 @@ pub fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
     reqwest_headers
 }
 
-pub fn map_bytes_to_body(
+pub fn bytes_to_body(
     response: http::Response<Bytes>,
 ) -> miette::Result<http::Response<Body>, String> {
     let mut new_response = http::Response::builder().status(response.status());

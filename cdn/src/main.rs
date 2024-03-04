@@ -13,7 +13,7 @@ use reqwest::Method as ReqMethod;
 use tracing::{debug, info};
 use utils::{into_axum_response, map_to_reqwest_headers};
 
-use crate::utils::map_bytes_to_body;
+use crate::utils::bytes_to_body;
 
 mod utils;
 
@@ -70,7 +70,7 @@ async fn proxy_request(
 
     let response = try_get_cached_response(&method, &headers, &url, body_bytes).await?;
 
-    Ok(map_bytes_to_body(response)?)
+    Ok(bytes_to_body(response)?)
 }
 
 #[tracing::instrument(skip(body))]

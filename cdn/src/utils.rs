@@ -1,6 +1,6 @@
 use axum::{
     body::{Body, Bytes},
-    http::{HeaderMap, HeaderName, HeaderValue},
+    http::{self, HeaderMap, HeaderName, HeaderValue},
     response::Response,
 };
 use miette::IntoDiagnostic;
@@ -21,6 +21,19 @@ pub fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
     reqwest_headers
 }
 
+pub fn map_bytes_to_body(
+    response: http::Response<Bytes>,
+) -> miette::Result<http::Response<Body>, String> {
+    let mut new_response = http::Response::builder().status(response.status());
+    for (k, v) in response.headers() {
+        new_response = new_response.header(k, v);
+    }
+
+    new_response
+        .body(Body::from(response.body().clone()))
+        .map_err(|e| format!("Failed to convert bytes to body: {}", e))
+}
+
 pub async fn response_body_to_bytes(response: reqwest::Response) -> miette::Result<Bytes, String> {
     response
         .bytes()
@@ -31,7 +44,7 @@ pub async fn response_body_to_bytes(response: reqwest::Response) -> miette::Resu
 
 pub async fn into_axum_response(
     response: reqwest::Response,
-) -> miette::Result<Response<Body>, String> {
+) -> miette::Result<Response<Bytes>, String> {
     let mut response_builder = Response::builder().status(response.status().as_u16());
     response_builder.headers_mut().map(|headers| {
         headers.extend(response.headers().into_iter().map(|(name, value)| {
@@ -42,7 +55,7 @@ pub async fn into_axum_response(
     });
 
     let response = response_builder
-        .body(Body::from(response_body_to_bytes(response).await?))
+        .body(response_body_to_bytes(response).await?)
         .map_err(|e| format!("failed to set response body: {}", e))?;
 
     Ok(response)

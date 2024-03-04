@@ -1,7 +1,7 @@
 use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Mutex};
 
 use axum::{
-    body::{Body, Bytes},
+    body::Bytes,
     debug_handler,
     extract::Host,
     http::{self, HeaderMap, Method, Uri},
@@ -13,13 +13,15 @@ use reqwest::Method as ReqMethod;
 use tracing::{debug, info};
 use utils::{into_axum_response, map_to_reqwest_headers};
 
+use crate::utils::map_bytes_to_body;
+
 mod utils;
 
 const PROXY_FROM_DOMAIN: &str = "slow.delivrs.test";
 const PROXY_ORIGIN_DOMAIN: &str = "localhost:8080";
 
 type CacheKey = (Method, Uri);
-type Cache = Mutex<HashMap<CacheKey, http::Response<Vec<u8>>>>;
+type Cache = Mutex<HashMap<CacheKey, http::Response<Bytes>>>;
 
 lazy_static::lazy_static! {
     static ref CACHE: Cache = Mutex::new(HashMap::new());
@@ -68,17 +70,18 @@ async fn proxy_request(
 
     let response = try_get_cached_response(&method, &headers, &url, body_bytes).await?;
 
-    Ok(response)
+    Ok(map_bytes_to_body(response)?)
 }
 
+#[tracing::instrument(skip(body))]
 async fn try_get_cached_response(
     method: &Method,
     headers: &HeaderMap,
     url: &Uri,
     body: Bytes,
-) -> miette::Result<http::Response<Body>, String> {
+) -> miette::Result<http::Response<Bytes>, String> {
     {
-        let cache = CACHE.lock().unwrap();
+        let cache = CACHE.lock().unwrap(); // FIXME: value not living long enough
         let cached = cache.get(&(method.clone(), url.clone()));
         if let Some(cached_response) = cached {
             let mut response_builder = http::Response::builder().status(cached_response.status());
@@ -86,7 +89,7 @@ async fn try_get_cached_response(
                 response_builder = response_builder.header(key, value);
             }
             let response = response_builder
-                .body(Body::from(cached_response.body().as_slice()))
+                .body(cached_response.body().clone())
                 .map_err(|e| format!("Failed to build response from cached response: {}", e))?;
 
             return Ok(response);
@@ -105,5 +108,13 @@ async fn try_get_cached_response(
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
 
-    Ok(into_axum_response(origin_response).await?)
+    let response = {
+        let response = into_axum_response(origin_response).await?;
+        let mut cache = CACHE.lock().unwrap();
+        cache.insert((method.clone(), url.clone()), response.clone());
+
+        response
+    };
+
+    Ok(response)
 }

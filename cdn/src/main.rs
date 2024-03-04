@@ -82,7 +82,7 @@ async fn try_get_cached_response(
     body: Bytes,
 ) -> miette::Result<http::Response<Bytes>, String> {
     {
-        let cache = CACHE.lock().unwrap(); // FIXME: value not living long enough
+        let cache = CACHE.lock().unwrap();
         let cached = cache.get(&(method.clone(), url.clone()));
         if let Some(cached_response) = cached {
             info!("Cache hit");

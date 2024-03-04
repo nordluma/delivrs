@@ -40,6 +40,7 @@ pub async fn into_axum_response(
     let mut response_builder = Response::builder().status(response.status().as_u16());
     response_builder.headers_mut().map(|headers| {
         headers.extend(response.headers().into_iter().map(|(name, value)| {
+            // TODO: change unwrap to something better
             let name = HeaderName::from_bytes(name.as_ref()).unwrap();
             let value = HeaderValue::from_bytes(value.as_ref()).unwrap();
             (name, value)

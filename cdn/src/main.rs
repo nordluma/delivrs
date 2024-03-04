@@ -10,7 +10,7 @@ use axum::{
 };
 use miette::IntoDiagnostic;
 use reqwest::Method as ReqMethod;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use utils::{into_axum_response, map_to_reqwest_headers};
 
 use crate::utils::bytes_to_body;
@@ -44,6 +44,7 @@ async fn main() -> miette::Result<()> {
 }
 
 #[debug_handler]
+#[tracing::instrument(skip(body_bytes))]
 async fn proxy_request(
     Host(host): Host,
     method: Method,
@@ -84,6 +85,7 @@ async fn try_get_cached_response(
         let cache = CACHE.lock().unwrap(); // FIXME: value not living long enough
         let cached = cache.get(&(method.clone(), url.clone()));
         if let Some(cached_response) = cached {
+            info!("Cache hit");
             let mut response_builder = http::Response::builder().status(cached_response.status());
             for (key, value) in cached_response.headers() {
                 response_builder = response_builder.header(key, value);
@@ -96,6 +98,7 @@ async fn try_get_cached_response(
         }
     }
 
+    warn!("Cache miss");
     let client = reqwest::Client::new();
     let origin_response = client
         .request(

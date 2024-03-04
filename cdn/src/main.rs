@@ -1,7 +1,7 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Mutex};
 
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     debug_handler,
     extract::Host,
     http::{self, HeaderMap, Method, Uri},
@@ -17,6 +17,13 @@ mod utils;
 
 const PROXY_FROM_DOMAIN: &str = "slow.delivrs.test";
 const PROXY_ORIGIN_DOMAIN: &str = "localhost:8080";
+
+type CacheKey = (Method, Uri);
+type Cache = Mutex<HashMap<CacheKey, http::Response<Vec<u8>>>>;
+
+lazy_static::lazy_static! {
+    static ref CACHE: Cache = Mutex::new(HashMap::new());
+}
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {
@@ -69,10 +76,25 @@ async fn try_get_cached_response(
     headers: &HeaderMap,
     url: &Uri,
     body: Bytes,
-) -> miette::Result<impl IntoResponse, String> {
-    let client = reqwest::Client::new();
+) -> miette::Result<http::Response<Body>, String> {
+    {
+        let cache = CACHE.lock().unwrap();
+        let cached = cache.get(&(method.clone(), url.clone()));
+        if let Some(cached_response) = cached {
+            let mut response_builder = http::Response::builder().status(cached_response.status());
+            for (key, value) in cached_response.headers() {
+                response_builder = response_builder.header(key, value);
+            }
+            let response = response_builder
+                .body(Body::from(cached_response.body().as_slice()))
+                .map_err(|e| format!("Failed to build response from cached response: {}", e))?;
 
-    let response = client
+            return Ok(response);
+        }
+    }
+
+    let client = reqwest::Client::new();
+    let origin_response = client
         .request(
             ReqMethod::from_str(method.as_str()).unwrap(),
             url.to_string(),
@@ -83,5 +105,5 @@ async fn try_get_cached_response(
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
 
-    Ok(into_axum_response(response).await?)
+    Ok(into_axum_response(origin_response).await?)
 }

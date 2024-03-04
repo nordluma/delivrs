@@ -4,7 +4,7 @@ use axum::{
     body::Bytes,
     debug_handler,
     extract::Host,
-    http::{self, HeaderMap, Method, Uri},
+    http::{self, request::Builder, HeaderMap, Method, Uri},
     response::IntoResponse,
     Router,
 };
@@ -13,7 +13,7 @@ use reqwest::Method as ReqMethod;
 use tracing::{debug, info, warn};
 use utils::{into_axum_response, map_to_reqwest_headers};
 
-use crate::utils::bytes_to_body;
+use crate::utils::{add_headers, bytes_to_body};
 
 mod utils;
 
@@ -87,6 +87,7 @@ async fn try_get_cached_response(
         if let Some(cached_response) = cached {
             info!("Cache hit");
             let mut response_builder = http::Response::builder().status(cached_response.status());
+            let response_builder = add_headers(response_builder, cached_response.headers());
             for (key, value) in cached_response.headers() {
                 response_builder = response_builder.header(key, value);
             }

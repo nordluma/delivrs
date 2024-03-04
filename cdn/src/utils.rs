@@ -1,12 +1,20 @@
 use axum::{
     body::{Body, Bytes},
-    http::{self, HeaderMap, HeaderName, HeaderValue},
+    http::{self, response::Builder, HeaderMap, HeaderName, HeaderValue},
     response::Response,
 };
 use miette::IntoDiagnostic;
 use reqwest::header::{
     HeaderMap as ReqHeaderMap, HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue,
 };
+
+pub fn add_headers(mut response_builder: Builder, headers: &HeaderMap) -> Builder {
+    for (key, value) in headers {
+        response_builder = response_builder.header(key, value);
+    }
+
+    response_builder
+}
 
 pub fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
     let mut reqwest_headers = ReqHeaderMap::with_capacity(headers.len());
@@ -25,9 +33,7 @@ pub fn bytes_to_body(
     response: http::Response<Bytes>,
 ) -> miette::Result<http::Response<Body>, String> {
     let mut new_response = http::Response::builder().status(response.status());
-    for (k, v) in response.headers() {
-        new_response = new_response.header(k, v);
-    }
+    let new_response = add_headers(new_response, response.headers());
 
     new_response
         .body(Body::from(response.body().clone()))

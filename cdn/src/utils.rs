@@ -34,14 +34,6 @@ pub fn map_bytes_to_body(
         .map_err(|e| format!("Failed to convert bytes to body: {}", e))
 }
 
-pub async fn response_body_to_bytes(response: reqwest::Response) -> miette::Result<Bytes, String> {
-    response
-        .bytes()
-        .await
-        .into_diagnostic()
-        .map_err(|e| format!("failed to get bytes from response: {}", e))
-}
-
 pub async fn into_axum_response(
     response: reqwest::Response,
 ) -> miette::Result<Response<Bytes>, String> {
@@ -55,7 +47,13 @@ pub async fn into_axum_response(
     });
 
     let response = response_builder
-        .body(response_body_to_bytes(response).await?)
+        .body(
+            response
+                .bytes()
+                .await
+                .into_diagnostic()
+                .map_err(|e| format!("failed to get bytes from response: {}", e))?,
+        )
         .map_err(|e| format!("failed to set response body: {}", e))?;
 
     Ok(response)

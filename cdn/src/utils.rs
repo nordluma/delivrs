@@ -46,14 +46,15 @@ pub async fn into_axum_response(
     response: reqwest::Response,
 ) -> miette::Result<Response<Bytes>, String> {
     let mut response_builder = Response::builder().status(response.status().as_u16());
-    response_builder.headers_mut().map(|headers| {
+    if let Some(headers) = response_builder.headers_mut() {
         headers.extend(response.headers().into_iter().map(|(name, value)| {
             // TODO: change unwrap to something better
             let name = HeaderName::from_bytes(name.as_ref()).unwrap();
             let value = HeaderValue::from_bytes(value.as_ref()).unwrap();
+
             (name, value)
         }))
-    });
+    };
 
     let response = response_builder
         .body(

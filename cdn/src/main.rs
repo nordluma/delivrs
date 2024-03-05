@@ -71,7 +71,7 @@ async fn proxy_request(
 
     let response = try_get_cached_response(&method, &headers, &url, body_bytes).await?;
 
-    Ok(bytes_to_body(response)?)
+    bytes_to_body(response)
 }
 
 struct CachedResponse {

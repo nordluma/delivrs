@@ -8,7 +8,7 @@ use reqwest::header::{
     HeaderMap as ReqHeaderMap, HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue,
 };
 
-pub fn add_headers(mut response_builder: Builder, headers: &HeaderMap) -> Builder {
+pub fn response_with_headers(mut response_builder: Builder, headers: &HeaderMap) -> Builder {
     for (key, value) in headers {
         response_builder = response_builder.header(key, value);
     }
@@ -32,8 +32,10 @@ pub fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
 pub fn bytes_to_body(
     response: http::Response<Bytes>,
 ) -> miette::Result<http::Response<Body>, String> {
-    let mut new_response = http::Response::builder().status(response.status());
-    let new_response = add_headers(new_response, response.headers());
+    let new_response = response_with_headers(
+        http::Response::builder().status(response.status()),
+        response.headers(),
+    );
 
     new_response
         .body(Body::from(response.body().clone()))

@@ -21,7 +21,7 @@ const PROXY_FROM_DOMAIN: &str = "slow.delivrs.test";
 const PROXY_ORIGIN_DOMAIN: &str = "localhost:8080";
 
 type CacheKey = (Method, Uri);
-type Cache = Mutex<HashMap<CacheKey, http::Response<Bytes>>>;
+type Cache = Mutex<HashMap<CacheKey, CachedResponse>>;
 
 lazy_static::lazy_static! {
     static ref CACHE: Cache = Mutex::new(HashMap::new());
@@ -74,6 +74,20 @@ async fn proxy_request(
     Ok(bytes_to_body(response)?)
 }
 
+struct CachedResponse {
+    response: http::Response<Bytes>,
+    cached_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl CachedResponse {
+    fn new(response: http::Response<Bytes>) -> Self {
+        Self {
+            response,
+            cached_at: chrono::Utc::now(),
+        }
+    }
+}
+
 #[tracing::instrument(skip(body))]
 async fn try_get_cached_response(
     method: &Method,
@@ -84,15 +98,15 @@ async fn try_get_cached_response(
     {
         let cache = CACHE.lock().unwrap();
         let cached = cache.get(&(method.clone(), url.clone()));
-        if let Some(cached_response) = cached {
+        if let Some(cached) = cached {
             info!("Cache hit");
             let response_builder = response_with_headers(
-                http::Response::builder().status(cached_response.status()),
-                cached_response.headers(),
+                http::Response::builder().status(cached.response.status()),
+                cached.response.headers(),
             );
 
             let response = response_builder
-                .body(cached_response.body().clone())
+                .body(cached.response.body().clone())
                 .map_err(|e| format!("Failed to build response from cached response: {}", e))?;
 
             return Ok(response);
@@ -115,7 +129,10 @@ async fn try_get_cached_response(
     let response = {
         let response = into_axum_response(origin_response).await?;
         let mut cache = CACHE.lock().unwrap();
-        cache.insert((method.clone(), url.clone()), response.clone());
+        cache.insert(
+            (method.clone(), url.clone()),
+            CachedResponse::new(response.clone()),
+        );
 
         response
     };

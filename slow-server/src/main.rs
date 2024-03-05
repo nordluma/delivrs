@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use actix_web::{web, App, HttpRequest, HttpServer};
+use actix_web::{
+    http::header::{CacheControl, CacheDirective, ContentType},
+    web, App, HttpRequest, HttpResponse, HttpServer, Responder,
+};
 use chrono::Utc;
 use maud::{html, Markup};
 
@@ -36,28 +39,41 @@ async fn index(request: HttpRequest) -> actix_web::Result<Markup> {
     ))
 }
 
-async fn fast(request: HttpRequest) -> actix_web::Result<Markup> {
+async fn fast(request: HttpRequest) -> impl Responder {
     println!("->> HANDLER - fast: {:?}", request);
     let now = Utc::now();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    Ok(html!(
-        html {
-            h1 { r#""Fast" endpoint"#}
-            p { "Current time: " (now) }
-        }
-    ))
+    ok_with_cache_headers(
+        html!(
+            html {
+                h1 { r#""Fast" endpoint"# }
+                p { "Current time: " (now) }
+            }
+        )
+        .into(),
+    )
 }
 
-async fn slow(request: HttpRequest) -> actix_web::Result<Markup> {
+async fn slow(request: HttpRequest) -> impl Responder {
     println!("->> HANDLER - slow: {:?}", request);
     let now = Utc::now();
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    Ok(html!(
-        html {
-            h1 { r#""Slow" endpoint"#}
-            p { "Current time: " (now) }
-        }
-    ))
+    ok_with_cache_headers(
+        html!(
+            html {
+                h1 { r#""Slow" endpoint"# }
+                p { "Current time: " (now) }
+            }
+        )
+        .into(),
+    )
+}
+
+fn ok_with_cache_headers(body: String) -> HttpResponse {
+    HttpResponse::Ok()
+        .insert_header(CacheControl(vec![CacheDirective::MaxAge(60)]))
+        .content_type(ContentType::html())
+        .body(body)
 }

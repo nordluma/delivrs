@@ -440,6 +440,7 @@ name = "cdn"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "lazy_static",
  "miette",
  "reqwest",
@@ -466,6 +467,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-targets 0.52.4",
 ]

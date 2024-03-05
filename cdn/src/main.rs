@@ -88,9 +88,6 @@ async fn try_get_cached_response(
             info!("Cache hit");
             let mut response_builder = http::Response::builder().status(cached_response.status());
             let response_builder = add_headers(response_builder, cached_response.headers());
-            for (key, value) in cached_response.headers() {
-                response_builder = response_builder.header(key, value);
-            }
             let response = response_builder
                 .body(cached_response.body().clone())
                 .map_err(|e| format!("Failed to build response from cached response: {}", e))?;

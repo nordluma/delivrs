@@ -72,8 +72,12 @@ async fn slow(request: HttpRequest) -> impl Responder {
 }
 
 fn ok_with_cache_headers(body: String) -> HttpResponse {
-    HttpResponse::Ok()
+    let response = HttpResponse::Ok()
         .insert_header(CacheControl(vec![CacheDirective::MaxAge(60)]))
         .content_type(ContentType::html())
-        .body(body)
+        .body(body);
+
+    println!("->> RESPONSE - {:#?}", response);
+
+    response
 }

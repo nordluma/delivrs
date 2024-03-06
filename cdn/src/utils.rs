@@ -1,5 +1,5 @@
 use axum::{
-    body::{Body, Bytes},
+    body::{to_bytes, Body, Bytes},
     http::{self, response::Builder, HeaderMap, HeaderName, HeaderValue},
     response::Response,
 };
@@ -40,6 +40,17 @@ pub fn bytes_to_body(
     new_response
         .body(Body::from(response.body().clone()))
         .map_err(|e| format!("Failed to convert bytes to body: {}", e))
+}
+
+pub async fn body_to_bytes(
+    request: http::Request<Body>,
+) -> miette::Result<http::Request<Bytes>, String> {
+    let (parts, body) = request.into_parts();
+    let body_bytes = to_bytes(body, usize::MAX)
+        .await
+        .map_err(|e| format!("Failed to convert body to bytes: {}", e))?;
+
+    Ok(http::Request::from_parts(parts, body_bytes))
 }
 
 pub async fn into_axum_response(

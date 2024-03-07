@@ -89,23 +89,12 @@ async fn try_get_cached_response(
 
     {
         let cache = CACHE.lock().unwrap();
-        let cached = cache.get(&(request.method().clone(), url.clone()));
-
-        if let Some(cached) = cached {
-            let response_builder = response_with_headers(
-                http::Response::builder().status(cached.response.status()),
-                cached.response.headers(),
-            );
-
-            let response = response_builder
-                .body(cached.response.body().clone())
-                .map_err(|e| format!("Failed to build response from cached response: {}", e))?;
-
-            let policy = CachePolicy::new(&cached.request, &response);
+        if let Some(cached) = cache.get(&(request.method().clone(), url.clone())) {
+            let policy = CachePolicy::new(&cached.request, &cached.response);
             match policy.before_request(&request, SystemTime::now()) {
                 BeforeRequest::Fresh(_) => {
                     info!("Cache hit for: {}", url);
-                    return Ok(response);
+                    return Ok(cached.response.clone());
                 }
                 BeforeRequest::Stale {
                     request: new_request,

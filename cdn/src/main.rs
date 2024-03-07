@@ -8,7 +8,7 @@ use axum::{
     response::IntoResponse,
     Router,
 };
-use http_cache_semantics::{BeforeRequest, CachePolicy};
+use http_cache_semantics::{BeforeRequest, CachePolicy, RequestLike};
 use miette::IntoDiagnostic;
 use reqwest::Method as ReqMethod;
 use tracing::{debug, info, warn};
@@ -51,6 +51,7 @@ async fn proxy_request(
     request: Request<Body>,
 ) -> miette::Result<impl IntoResponse, String> {
     info!("HANDLER - proxy_request");
+    dbg!(request.headers());
     let hostname = host.split(':').next().unwrap_or("unknown");
     if hostname != PROXY_FROM_DOMAIN {
         return Err(format!(
@@ -102,7 +103,7 @@ async fn try_get_cached_response(
                 } => {
                     info!(
                         matches,
-                        request = ?new_request,
+                        headers = ?new_request.headers(),
                         "Cache hit but response is stale: {}",
                         url
                     );

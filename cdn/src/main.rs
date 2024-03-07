@@ -11,10 +11,10 @@ use axum::{
 use http_cache_semantics::{BeforeRequest, CachePolicy, RequestLike};
 use miette::IntoDiagnostic;
 use reqwest::Method as ReqMethod;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use utils::{into_axum_response, map_to_reqwest_headers};
 
-use crate::utils::{body_to_bytes, bytes_to_body, response_with_headers};
+use crate::utils::{body_to_bytes, bytes_to_body};
 
 mod utils;
 
@@ -45,13 +45,13 @@ async fn main() -> miette::Result<()> {
 }
 
 #[debug_handler]
-#[tracing::instrument(skip(request))]
+#[tracing::instrument(skip_all)]
 async fn proxy_request(
     Host(host): Host,
     request: Request<Body>,
 ) -> miette::Result<impl IntoResponse, String> {
-    info!("HANDLER - proxy_request");
-    dbg!(request.headers());
+    let now = SystemTime::now();
+    info!("request received at: {:?}", now);
     let hostname = host.split(':').next().unwrap_or("unknown");
     if hostname != PROXY_FROM_DOMAIN {
         return Err(format!(
@@ -60,7 +60,7 @@ async fn proxy_request(
         ));
     }
 
-    try_get_cached_response(request)
+    try_get_cached_response(request, now)
         .await
         .and_then(bytes_to_body)
 }
@@ -68,7 +68,7 @@ async fn proxy_request(
 struct CachedResponse {
     request: http::Request<Bytes>,
     response: http::Response<Bytes>,
-    cached_at: chrono::DateTime<chrono::Utc>,
+    cached_at: SystemTime,
 }
 
 impl CachedResponse {
@@ -76,22 +76,34 @@ impl CachedResponse {
         Self {
             request,
             response,
-            cached_at: chrono::Utc::now(),
+            cached_at: SystemTime::now(),
         }
     }
 }
 
 #[tracing::instrument(skip_all)]
 async fn try_get_cached_response(
-    request: Request<Body>,
+    mut request: Request<Body>,
+    response_time: SystemTime,
 ) -> miette::Result<http::Response<Bytes>, String> {
     info!("Request headers: {:?}", request.headers());
     let url = request.uri().clone();
 
+    // TODO: remove this
+    request
+        .headers_mut()
+        .insert("Cache-Control", "max-age=60".parse().unwrap());
+
     {
         let cache = CACHE.lock().unwrap();
         if let Some(cached) = cache.get(&(request.method().clone(), url.clone())) {
-            let policy = CachePolicy::new(&cached.request, &cached.response);
+            let policy = CachePolicy::new_options(
+                &cached.request,
+                &cached.response,
+                response_time,
+                Default::default(),
+            );
+
             match policy.before_request(&request, SystemTime::now()) {
                 BeforeRequest::Fresh(_) => {
                     info!("Cache hit for: {}", url);
@@ -103,7 +115,8 @@ async fn try_get_cached_response(
                 } => {
                     info!(
                         matches,
-                        headers = ?new_request.headers(),
+                        cached_at = ?cached.cached_at,
+                        cache_control = ?new_request.headers().get("Cache-Control"),
                         "Cache hit but response is stale: {}",
                         url
                     );
@@ -112,15 +125,15 @@ async fn try_get_cached_response(
         }
     }
 
-    warn!("Cache miss for: {}", url);
+    info!("Cache miss for: {}", url);
     let origin_url = Uri::builder()
         .scheme("http")
         .authority(PROXY_ORIGIN_DOMAIN)
         .path_and_query(url.path_and_query().map(|pq| pq.path()).unwrap_or("/"))
         .build()
         .map_err(|e| format!("Failed to build url: {}", e))?;
-    let request = body_to_bytes(request).await?;
 
+    let request = body_to_bytes(request).await?;
     let client = reqwest::Client::new();
     let origin_response = client
         .request(
@@ -128,6 +141,7 @@ async fn try_get_cached_response(
             origin_url.to_string(),
         )
         .headers(map_to_reqwest_headers(request.headers().clone()))
+        .header("Age", 0) // Insert missing age header
         .body(request.body().clone())
         .send()
         .await

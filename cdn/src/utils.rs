@@ -3,7 +3,7 @@ use axum::{
     http::{self, response::Builder, HeaderMap, HeaderName, HeaderValue},
     response::Response,
 };
-use miette::IntoDiagnostic;
+use miette::{miette, IntoDiagnostic};
 use reqwest::header::{
     HeaderMap as ReqHeaderMap, HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue,
 };
@@ -29,9 +29,7 @@ pub fn map_to_reqwest_headers(headers: HeaderMap) -> ReqHeaderMap {
     reqwest_headers
 }
 
-pub fn bytes_to_body(
-    response: http::Response<Bytes>,
-) -> miette::Result<http::Response<Body>, String> {
+pub fn bytes_to_body(response: http::Response<Bytes>) -> miette::Result<http::Response<Body>> {
     let new_response = response_with_headers(
         http::Response::builder().status(response.status()),
         response.headers(),
@@ -39,23 +37,19 @@ pub fn bytes_to_body(
 
     new_response
         .body(Body::from(response.body().clone()))
-        .map_err(|e| format!("Failed to convert bytes to body: {}", e))
+        .map_err(|e| miette!("Failed to convert bytes to body: {}", e))
 }
 
-pub async fn body_to_bytes(
-    request: http::Request<Body>,
-) -> miette::Result<http::Request<Bytes>, String> {
+pub async fn body_to_bytes(request: http::Request<Body>) -> miette::Result<http::Request<Bytes>> {
     let (parts, body) = request.into_parts();
     let body_bytes = to_bytes(body, usize::MAX)
         .await
-        .map_err(|e| format!("Failed to convert body to bytes: {}", e))?;
+        .map_err(|e| miette!("Failed to convert body to bytes: {}", e))?;
 
     Ok(http::Request::from_parts(parts, body_bytes))
 }
 
-pub async fn into_axum_response(
-    response: reqwest::Response,
-) -> miette::Result<Response<Bytes>, String> {
+pub async fn into_axum_response(response: reqwest::Response) -> miette::Result<Response<Bytes>> {
     let mut response_builder = Response::builder().status(response.status().as_u16());
     if let Some(headers) = response_builder.headers_mut() {
         headers.extend(response.headers().into_iter().map(|(name, value)| {
@@ -73,9 +67,9 @@ pub async fn into_axum_response(
                 .bytes()
                 .await
                 .into_diagnostic()
-                .map_err(|e| format!("failed to get bytes from response: {}", e))?,
+                .map_err(|e| miette!("failed to get bytes from response: {}", e))?,
         )
-        .map_err(|e| format!("failed to set response body: {}", e))?;
+        .map_err(|e| miette!("failed to set response body: {}", e))?;
 
     Ok(response)
 }

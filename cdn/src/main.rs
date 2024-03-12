@@ -9,7 +9,7 @@ use axum::{
     Router,
 };
 use http_cache_semantics::{BeforeRequest, CachePolicy, RequestLike};
-use miette::IntoDiagnostic;
+use miette::{miette, IntoDiagnostic};
 use reqwest::Method as ReqMethod;
 use tracing::{debug, info};
 
@@ -62,6 +62,7 @@ async fn proxy_request(
     try_get_cached_response(request, now)
         .await
         .and_then(bytes_to_body)
+        .map_err(|e| e.to_string())
 }
 
 struct CachedResponse {
@@ -84,7 +85,7 @@ impl CachedResponse {
 async fn try_get_cached_response(
     mut request: Request<Body>,
     response_time: SystemTime,
-) -> miette::Result<http::Response<Bytes>, String> {
+) -> miette::Result<http::Response<Bytes>> {
     info!("Request headers: {:?}", request.headers());
     let url = request.uri().clone();
 
@@ -125,7 +126,7 @@ async fn try_get_cached_response(
         .authority(PROXY_ORIGIN_DOMAIN)
         .path_and_query(url.path_and_query().map(|pq| pq.path()).unwrap_or("/"))
         .build()
-        .map_err(|e| format!("Failed to build url: {}", e))?;
+        .map_err(|e| miette!("Failed to build url: {}", e))?;
 
     let request = body_to_bytes(request).await?;
     let client = reqwest::Client::new();
@@ -139,7 +140,7 @@ async fn try_get_cached_response(
         .body(request.body().clone())
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| miette!("Request failed: {}", e))?;
 
     let response = {
         let response = into_axum_response(origin_response).await?;

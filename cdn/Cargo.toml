@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.7.4", features = ["tracing", "macros"] }
-cacache = { version = "13.0.0", features = ["tokio"] }
 chrono = { version = "0.4.34", features = ["serde"] }
 http-cache-semantics = "2.0.1"
 lazy_static = "1.4.0"
@@ -18,3 +17,8 @@ serde_json = "1.0.114"
 tokio = { version = "1.36.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+
+[dependencies.cacache]
+version = "13.0.0"
+default-features = false
+features = ["tokio-runtime", "mmap"]

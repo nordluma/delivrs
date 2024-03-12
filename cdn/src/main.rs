@@ -88,11 +88,6 @@ async fn try_get_cached_response(
     info!("Request headers: {:?}", request.headers());
     let url = request.uri().clone();
 
-    // TODO: remove this
-    request
-        .headers_mut()
-        .insert("Cache-Control", "max-age=60".parse().unwrap());
-
     {
         let cache = CACHE.lock().unwrap();
         if let Some(cached) = cache.get(&(request.method().clone(), url.clone())) {

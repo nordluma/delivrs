@@ -12,9 +12,8 @@ use http_cache_semantics::{BeforeRequest, CachePolicy, RequestLike};
 use miette::IntoDiagnostic;
 use reqwest::Method as ReqMethod;
 use tracing::{debug, info};
-use utils::{into_axum_response, map_to_reqwest_headers};
 
-use crate::utils::{body_to_bytes, bytes_to_body};
+use crate::utils::{body_to_bytes, bytes_to_body, into_axum_response, map_to_reqwest_headers};
 
 mod utils;
 

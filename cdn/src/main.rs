@@ -19,6 +19,7 @@ mod utils;
 
 const PROXY_FROM_DOMAIN: &str = "slow.delivrs.test";
 const PROXY_ORIGIN_DOMAIN: &str = "localhost:8080";
+const CACHE_DIR: &str = "./tmp/cache";
 
 type CacheKey = (Method, Uri);
 type Cache = Mutex<HashMap<CacheKey, CachedResponse>>;
@@ -91,7 +92,13 @@ async fn try_get_cached_response(
 
     {
         let cache = CACHE.lock().unwrap();
-        if let Some(cached) = cache.get(&(request.method().clone(), url.clone())) {
+        let cached_response = cache.get(&(request.method().clone(), url.clone()));
+        let cache_key = format!("{}@{}", request.method(), url);
+        let cache_res = cacache::read(CACHE_DIR, cache_key)
+            .await
+            .map_err(|e| miette!("failed to read from cache: {}", e))?;
+
+        if let Some(cached) = cached_response {
             let policy = CachePolicy::new_options(
                 &cached.request,
                 &cached.response,
@@ -144,11 +151,10 @@ async fn try_get_cached_response(
 
     let response = {
         let response = into_axum_response(origin_response).await?;
-        let mut cache = CACHE.lock().unwrap();
-        cache.insert(
-            (request.method().clone(), url),
-            CachedResponse::new(request, response.clone()),
-        );
+        let cache_key = format!("{}@{}", request.method(), url);
+        cacache::write(CACHE_DIR, cache_key, response)
+            .await
+            .map_err(|e| miette!("failed to write to cache: {}", e))?;
 
         response
     };

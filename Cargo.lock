@@ -470,6 +470,7 @@ dependencies = [
  "cacache",
  "chrono",
  "http-cache-semantics",
+ "http-serde",
  "lazy_static",
  "miette 7.1.0",
  "reqwest",

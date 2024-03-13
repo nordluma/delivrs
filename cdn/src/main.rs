@@ -11,9 +11,12 @@ use axum::{
 use http_cache_semantics::{BeforeRequest, CachePolicy, RequestLike};
 use miette::{miette, IntoDiagnostic};
 use reqwest::Method as ReqMethod;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::utils::{body_to_bytes, bytes_to_body, into_axum_response, map_to_reqwest_headers};
+use crate::utils::{
+    body_to_bytes, bytes_to_body, into_axum_response, map_to_reqwest_headers, response_with_headers,
+};
 
 mod utils;
 
@@ -66,17 +69,121 @@ async fn proxy_request(
         .map_err(|e| e.to_string())
 }
 
+trait IntoCacheable {
+    type Cacheable;
+
+    fn into_cacheable(self) -> Self::Cacheable;
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct InnerCacheRequest {
+    #[serde(with = "http_serde::method")]
+    method: http::Method,
+
+    #[serde(with = "http_serde::uri")]
+    uri: http::Uri,
+
+    #[serde(with = "http_serde::version")]
+    version: http::Version,
+
+    #[serde(with = "http_serde::header_map")]
+    headers: http::HeaderMap,
+
+    body: Vec<u8>,
+}
+
+impl IntoCacheable for http::Request<Bytes> {
+    type Cacheable = InnerCacheRequest;
+
+    fn into_cacheable(self) -> Self::Cacheable {
+        let (parts, body) = self.into_parts();
+
+        InnerCacheRequest {
+            method: parts.method,
+            uri: parts.uri,
+            version: parts.version,
+            headers: parts.headers,
+            body: body.to_vec(),
+        }
+    }
+}
+
+impl TryFrom<InnerCacheRequest> for http::Request<Bytes> {
+    type Error = miette::Error;
+
+    fn try_from(request: InnerCacheRequest) -> Result<Self, Self::Error> {
+        let mut request_builer = http::Request::builder()
+            .method(request.method)
+            .uri(request.uri)
+            .version(request.version);
+
+        for (key, value) in request.headers {
+            if let Some(key) = key {
+                request_builer = request_builer.header(key, value);
+            }
+        }
+
+        request_builer
+            .body(Bytes::from(request.body))
+            .map_err(|e| miette!("Failed to set request body: {}", e))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct InnerCacheResponse {
+    #[serde(with = "http_serde::status_code")]
+    status: http::StatusCode,
+
+    #[serde(with = "http_serde::version")]
+    version: http::Version,
+
+    #[serde(with = "http_serde::header_map")]
+    headers: http::HeaderMap,
+
+    body: Vec<u8>,
+}
+
+impl IntoCacheable for http::Response<Bytes> {
+    type Cacheable = InnerCacheResponse;
+
+    fn into_cacheable(self) -> Self::Cacheable {
+        let (parts, body) = self.into_parts();
+
+        InnerCacheResponse {
+            status: parts.status,
+            version: parts.version,
+            headers: parts.headers,
+            body: body.to_vec(),
+        }
+    }
+}
+
+impl TryFrom<InnerCacheResponse> for http::Response<Bytes> {
+    type Error = miette::Error;
+    fn try_from(response: InnerCacheResponse) -> Result<Self, Self::Error> {
+        let mut response_builder = http::Response::builder()
+            .status(response.status)
+            .version(response.version);
+        response_builder = response_with_headers(response_builder, &response.headers);
+
+        response_builder
+            .body(Bytes::from(response.body))
+            .map_err(|e| miette!("Failed to set body for response: {}", e))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct CachedResponse {
-    request: http::Request<Bytes>,
-    response: http::Response<Bytes>,
+    request: InnerCacheRequest,
+    response: InnerCacheResponse,
     cached_at: SystemTime,
 }
 
 impl CachedResponse {
     fn new(request: http::Request<Bytes>, response: http::Response<Bytes>) -> Self {
         Self {
-            request,
-            response,
+            request: request.into_cacheable(),
+            response: response.into_cacheable(),
             cached_at: SystemTime::now(),
         }
     }
@@ -84,24 +191,30 @@ impl CachedResponse {
 
 #[tracing::instrument(skip_all)]
 async fn try_get_cached_response(
-    mut request: Request<Body>,
+    request: Request<Body>,
     response_time: SystemTime,
 ) -> miette::Result<http::Response<Bytes>> {
     info!("Request headers: {:?}", request.headers());
     let url = request.uri().clone();
 
     {
-        let cache = CACHE.lock().unwrap();
-        let cached_response = cache.get(&(request.method().clone(), url.clone()));
+        //let cache = CACHE.lock().unwrap();
+        //let cached_response = cache.get(&(request.method().clone(), url.clone()));
         let cache_key = format!("{}@{}", request.method(), url);
         let cache_res = cacache::read(CACHE_DIR, cache_key)
             .await
             .map_err(|e| miette!("failed to read from cache: {}", e))?;
 
+        let cached_response: Option<CachedResponse> = postcard::from_bytes(&cache_res)
+            .map_err(|e| miette!("Failed to deserialize: {}", e))?;
+
         if let Some(cached) = cached_response {
+            let cached_request: http::Request<Bytes> = cached.request.try_into()?;
+            let cached_response: http::Response<Bytes> = cached.response.try_into()?;
+
             let policy = CachePolicy::new_options(
-                &cached.request,
-                &cached.response,
+                &cached_request,
+                &cached_response,
                 response_time,
                 Default::default(),
             );
@@ -109,7 +222,7 @@ async fn try_get_cached_response(
             match policy.before_request(&request, SystemTime::now()) {
                 BeforeRequest::Fresh(_) => {
                     info!("Cache hit for: {}", url);
-                    return Ok(cached.response.clone());
+                    return Ok(cached_response.clone());
                 }
                 BeforeRequest::Stale {
                     request: new_request,
@@ -152,7 +265,10 @@ async fn try_get_cached_response(
     let response = {
         let response = into_axum_response(origin_response).await?;
         let cache_key = format!("{}@{}", request.method(), url);
-        cacache::write(CACHE_DIR, cache_key, response)
+        let mut buf = vec![];
+        let ser = postcard::to_slice(&CachedResponse::new(request, response.clone()), &mut buf)
+            .map_err(|e| miette!("failed to serialize: {}", e))?;
+        cacache::write(CACHE_DIR, cache_key, ser)
             .await
             .map_err(|e| miette!("failed to write to cache: {}", e))?;
 

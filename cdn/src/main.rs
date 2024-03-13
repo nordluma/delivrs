@@ -1,10 +1,10 @@
-use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Mutex, time::SystemTime};
+use std::{net::SocketAddr, str::FromStr, time::SystemTime};
 
 use axum::{
     body::{Body, Bytes},
     debug_handler,
     extract::Host,
-    http::{self, Method, Request, Uri},
+    http::{self, Request, Uri},
     response::IntoResponse,
     Router,
 };
@@ -23,13 +23,6 @@ mod utils;
 const PROXY_FROM_DOMAIN: &str = "slow.delivrs.test";
 const PROXY_ORIGIN_DOMAIN: &str = "localhost:8080";
 const CACHE_DIR: &str = "./tmp/cache";
-
-type CacheKey = (Method, Uri);
-type Cache = Mutex<HashMap<CacheKey, CachedResponse>>;
-
-lazy_static::lazy_static! {
-    static ref CACHE: Cache = Mutex::new(HashMap::new());
-}
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {

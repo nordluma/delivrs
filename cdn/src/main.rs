@@ -190,45 +190,40 @@ async fn try_get_cached_response(
     info!("Request headers: {:?}", request.headers());
     let url = request.uri().clone();
 
+    let cache_key = format!("{}@{}", request.method(), url);
+    if let Ok(cache_res) = cacache::read(CACHE_DIR, &cache_key)
+        .await
+        .map_err(|e| miette!("failed to read from cache: {}", e))
     {
-        //let cache = CACHE.lock().unwrap();
-        //let cached_response = cache.get(&(request.method().clone(), url.clone()));
-        let cache_key = format!("{}@{}", request.method(), url);
-        let cache_res = cacache::read(CACHE_DIR, cache_key)
-            .await
-            .map_err(|e| miette!("failed to read from cache: {}", e))?;
-
-        let cached_response: Option<CachedResponse> = postcard::from_bytes(&cache_res)
+        let cached: CachedResponse = postcard::from_bytes(&cache_res)
             .map_err(|e| miette!("Failed to deserialize: {}", e))?;
 
-        if let Some(cached) = cached_response {
-            let cached_request: http::Request<Bytes> = cached.request.try_into()?;
-            let cached_response: http::Response<Bytes> = cached.response.try_into()?;
+        let cached_request: http::Request<Bytes> = cached.request.try_into()?;
+        let cached_response: http::Response<Bytes> = cached.response.try_into()?;
 
-            let policy = CachePolicy::new_options(
-                &cached_request,
-                &cached_response,
-                response_time,
-                Default::default(),
-            );
+        let policy = CachePolicy::new_options(
+            &cached_request,
+            &cached_response,
+            response_time,
+            Default::default(),
+        );
 
-            match policy.before_request(&request, SystemTime::now()) {
-                BeforeRequest::Fresh(_) => {
-                    info!("Cache hit for: {}", url);
-                    return Ok(cached_response.clone());
-                }
-                BeforeRequest::Stale {
-                    request: new_request,
+        match policy.before_request(&request, SystemTime::now()) {
+            BeforeRequest::Fresh(_) => {
+                info!("Cache hit for: {}", url);
+                return Ok(cached_response.clone());
+            }
+            BeforeRequest::Stale {
+                request: new_request,
+                matches,
+            } => {
+                info!(
                     matches,
-                } => {
-                    info!(
-                        matches,
-                        cached_at = ?cached.cached_at,
-                        cache_control = ?new_request.headers().get("Cache-Control"),
-                        "Cache hit but response is stale: {}",
-                        url
-                    );
-                }
+                    cached_at = ?cached.cached_at,
+                    cache_control = ?new_request.headers().get("Cache-Control"),
+                    "Cache hit but response is stale: {}",
+                    url
+                );
             }
         }
     }
@@ -257,10 +252,9 @@ async fn try_get_cached_response(
 
     let response = {
         let response = into_axum_response(origin_response).await?;
-        let cache_key = format!("{}@{}", request.method(), url);
-        let mut buf = vec![];
-        let ser = postcard::to_slice(&CachedResponse::new(request, response.clone()), &mut buf)
+        let ser = postcard::to_stdvec(&CachedResponse::new(request, response.clone()))
             .map_err(|e| miette!("failed to serialize: {}", e))?;
+
         cacache::write(CACHE_DIR, cache_key, ser)
             .await
             .map_err(|e| miette!("failed to write to cache: {}", e))?;

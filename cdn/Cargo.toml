@@ -15,9 +15,9 @@ postcard = { version = "1.0.8", features = ["use-std"] }
 reqwest = { version = "0.11.24", features = ["rustls-tls", "json"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
-tokio = { version = "1.36.0", features = ["full"] }
+tokio = { version = "1.38.2", features = ["full"] }
 tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
+tracing-subscriber = "0.3.20"
 
 [dependencies.cacache]
 version = "13.0.0"

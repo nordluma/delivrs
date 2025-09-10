@@ -9,4 +9,4 @@ edition = "2021"
 actix-web = "4.5.1"
 chrono = "0.4.34"
 maud = { version = "0.26.0", features = ["actix-web"] }
-tokio = { version = "1.36.0", features = ["full"] }
+tokio = { version = "1.38.2", features = ["full"] }
